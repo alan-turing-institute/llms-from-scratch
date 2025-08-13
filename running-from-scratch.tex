@@ -77,15 +77,26 @@ turn out, intermediate values) as \emph{arrays}: an array is an
 ordered sequence of values, all of which are, in some sense, ``the
 same kind of value.''
 
-
-
-\appendix
 \section{Tokenisation}
 
 ``Tokenisation'' is the process of converting a passage of text into
 an array of reals (or, anyway, floats), suitable for input to a deep
-learning model\@. Many models use the \sf{transformers} library's
-tokenisation functionality, specifically
+learning model. Different approaches to tokenisation are in use, the
+one that Llama-type models often used is called ``byte-pair
+encoding.''
+
+
+
+
+
+\appendix
+
+\section{BritLLM details}
+
+\subsection{The Tokenizer}
+
+Many models use the \sf{transformers} library's tokenisation
+functionality, specifically
 \begin{verbatim}
 transfomers.AutoTokenizer.from_pretrained
 \end{verbatim}
@@ -98,16 +109,15 @@ instantiate. For BritLLM, that config file seems to specify a
 \sf{LlamaTokenizer}. So then I guess we need to look in
 \sf{models/llama/tokenization\_llama.py}.
 
+Okay, actually I ran the code and asked it what type of object was
+produced, and it turns out that it is a ``fast tokenizer,'' which as I
+understand it means that a Rust library is used. Specifically, it's of
+class
+\sf{transformers.models.llama.tokenization\_llama\_fast.LlamaTokenizerFast}. 
 
+\subsubsection{Tokenizer configuration}
 
-
-
-
-
-
-\section{Tokenizer configuration}
-
-This is the file \sf{tokenizer\_config.json} from BritLLM.
+This is the file \sf{tokenizer\_config.json} from BritLLM\@.
 {\small
 \begin{verbatim}
 {
