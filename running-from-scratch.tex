@@ -1,0 +1,186 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage{amsmath}
+%\usepackage{bm}
+%\usepackage{ellipsis}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{hyperref}
+%
+%% Typography
+\usepackage{fontspec}
+\setmainfont{CMU Concrete}
+\usepackage{eulervm}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{siunitx}
+%
+%% Source code
+% 
+% \usepackage[medium, compact]{titlesec}
+%%
+%% Turing grid is 21 columns (of 1cm if we are using A4)
+%% Usually 4 "big columns", each of 4 text cols plus 1 gutter col;
+%% plus an additional gutter on the left.
+\usepackage[top=2.82cm, bottom=2.82cm, left=1cm, textwidth=11cm, marginparsep=1cm, marginparwidth=7cm]{geometry}
+\usepackage[Ragged, size=footnote, shape=up]{sidenotesplus}
+%% We used to use a two-column layout
+% \setlength{\columnsep}{1cm}
+\title{Running BritLLM from scratch}
+\author{James Geddes}
+\date{\today}
+%%
+\newcommand{\setR}{\mathbold{R}}
+\newcommand{\eg}{\emph{e.g.}}
+\newcommand{\ie}{\emph{i.e.}}
+\newcommand{\isdef}{\mathrel{\stackrel{\text{def}}{=}}}
+\hyphenation{anti-sym-met-ric}
+%%
+% \usepackage[backend=biber]{biblatex} 
+%\addbibresource{BIBLIOGRAPHY-GOES-HERE.bib}
+% \DefineBibliographyStrings{english}{
+%   andothers = {\mkbibemph{et\addabbrvspace{al}\adddot}}
+% }
+%%
+\begin{document}
+\maketitle
+
+A \emph{deep learning model} is a kind of map,
+$M\colon \setR^{d_\text{in}} \to \setR^{d_\text{out}}$, of a particular
+functional form, to be described below.
+
+The interpretation of an element of the domain, $\setR^{d_\text{in}}$,
+or the codomain, $\setR^{d_\text{out}}$, depends on the particular
+model.
+
+\emph{Example:} The job of a ``large language model'' is to
+stochastically emit ``the next word'' given a sequence of words. The
+output of the model, an element of $\setR^{d_\text{out}}$, is here
+construed as a tuple, $(p_1, \dotsc, p_{d_\text{out}})$, where each
+$p_i$ is the probability of emitting word number~$i$. That is, for
+this particular example, the output is interpreted as a categorical
+distribution over the set of possible output words, from which the
+next word is chosen with the given probabilities.
+
+Elements of the input and output spaces are typically called
+``vectors,'' although in fact there is often no meaningful
+interpretation of the canonical vector space structure on those
+spaces. In the example above, the output space might instead more
+reasonably be taken to be a \emph{subset} of $\setR^{d_\text{out}}$:
+namely, the $(d_\text{out}-1)$-dimensional simplex.\footnote{Note that
+  the (component-wise) sum of two elements of the simplex is not an
+  element of the simplex. (Each $p_i$ must lie in the range $[0,1]$
+  but the sum of two numbers between 0 and 1 is not necessarily a
+  number between 0 and~1.)}
+
+It is, however, useful to think of inputs and outputs (and, as it will
+turn out, intermediate values) as \emph{arrays}: an array is an
+ordered sequence of values, all of which are, in some sense, ``the
+same kind of value.''
+
+
+
+\appendix
+\section{Tokenisation}
+
+``Tokenisation'' is the process of converting a passage of text into
+an array of reals (or, anyway, floats), suitable for input to a deep
+learning model\@. Many models use the \sf{transformers} library's
+tokenisation functionality, specifically
+\begin{verbatim}
+transfomers.AutoTokenizer.from_pretrained
+\end{verbatim}
+which is in \sf{models/auto/tokenization\_auto.py}. Here is my best
+understanding of what that library does.
+
+First, I think \sf{Autotokenizer} reads the file
+\sf{tokenizer\_{}config.json} and decides what kind of tokeniser to
+instantiate. For BritLLM, that config file seems to specify a
+\sf{LlamaTokenizer}. So then I guess we need to look in
+\sf{models/llama/tokenization\_llama.py}.
+
+
+
+
+
+
+
+
+\section{Tokenizer configuration}
+
+This is the file \sf{tokenizer\_config.json} from BritLLM.
+{\small
+\begin{verbatim}
+{
+  "add_bos_token": false,
+  "add_eos_token": false,
+  "added_tokens_decoder": {
+    "0": {
+      "content": "<unk>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    },
+    "2": {
+      "content": "</s>",
+      "lstrip": false,
+      "normalized": false,
+      "rstrip": false,
+      "single_word": false,
+      "special": true
+    }
+  },
+  "bos_token": "</s>",
+  "clean_up_tokenization_spaces": false,
+  "eos_token": "</s>",
+  "legacy": true,
+  "model_max_length": 1000000000000000019884624838656,
+  "pad_token": null,
+  "sp_model_kwargs": {},
+  "spaces_between_special_tokens": false,
+  "tokenizer_class": "LlamaTokenizer",
+  "unk_token": "<unk>",
+  "use_default_system_prompt": false
+}
+\end{verbatim}}
+
+\end{document}
+
+%% Code from Huggingface
+
+# Load model directly
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("britllm/britllm-3b-v0.1")
+model = AutoModelForCausalLM.from_pretrained("britllm/britllm-3b-v0.1")
+
+
+%% Energy for one query
+
+GH200 is ~1 TFLOPS and ~1 kW
+
+So one second is
+
+(a) 10^12 FLOP and (b) 10^3 J
+
+So that's 10^9 FLOP per J
+
+1 billion parameters is 10^9. Say 3 FLOP per parameter per token. And
+~100 tokens per query (except there's some clever stuff going on)
+
+That's 300 J per query.
+
+Or 10^-4 kWh
+
+
+
+
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-engine: luatex
+%%% End:
+
+
+
