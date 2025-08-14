@@ -44,6 +44,8 @@
 \begin{document}
 \maketitle
 
+\section{Deep learning}
+
 A \emph{deep learning model} is a kind of map,
 $M\colon \setR^{d_\text{in}} \to \setR^{d_\text{out}}$, of a particular
 functional form, to be described below.
@@ -77,15 +79,48 @@ turn out, intermediate values) as \emph{arrays}: an array is an
 ordered sequence of values, all of which are, in some sense, ``the
 same kind of value.''
 
-\section{Tokenisation}
+\section{BritLLM}
 
-``Tokenisation'' is the process of converting a passage of text into
-an array of reals (or, anyway, floats), suitable for input to a deep
-learning model. Different approaches to tokenisation are in use, the
-one that Llama-type models often used is called ``byte-pair
-encoding.''
+BritLLM is a ``pretrained model.'' This section describes how to run
+inference for this particular model starting with the raw data
+files. The input to the model is a string; the output from the model
+is a probability distribution over the vocabulary of the model.
 
+The first step is to convert the input string to a ``vector.'' And the
+first step in that process is to convert the input string to an array
+of numbers.
 
+\subsection{Tokenisation}
+
+The vocabulary of the model is neither individual letters nor whole
+words but instead parts of words, known as ``tokens.''
+
+Each token has an identifying number. ``Tokenisation'' is the process
+of converting a passage of text into its parts of words, and thence to
+a list of integers. Different approaches to tokenisation are in use,
+the one that Llama-type models (like BritLLM) often use is called
+``byte-pair encoding'' [BPE]. A pretrained model comes with a
+pretrained tokeniser\sidenote{The definition of the tokeniser is in
+  the file \texttt{tokenizer.json}, and specifically in the dictionary
+  element labelled \texttt{"model"}. There is some additional
+  configuration in the file \texttt{tokenizer\_config.json}.} defined
+by
+\begin{enumerate}
+\item A set, $T$, of sequences of bytes; and
+  \item A map, $T\to [0 .. N-1]$.
+\end{enumerate}
+Note that the input string is regarded as a sequence of bytes. The
+input string is supposed to be UTF-8 encoded Unicode but it is the
+bytes that are tokenised (and not, for example, the Unicode
+codepoints).
+
+The process of converting a sequence of bytes to a list of integers
+for this particular model and its associated tokeniser is as follows:
+\begin{enumerate}
+\item Replace each space with the character U+2581, ``lower one eighth
+  block.'' (That is to say, with the sequence of bytes \verb|0xe2|,
+  \verb|0x96|, \verb|0x81|.)
+\end{enumerate}
 
 
 
@@ -114,6 +149,24 @@ produced, and it turns out that it is a ``fast tokenizer,'' which as I
 understand it means that a Rust library is used. Specifically, it's of
 class
 \sf{transformers.models.llama.tokenization\_llama\_fast.LlamaTokenizerFast}. 
+
+The table in the margin shows some of the properties of this object:
+\begin{margintable}
+\begin{tabular}{ll}
+  \toprule
+  \verb|bos_token| & \verb|</s>| \\
+  \verb|eos_token| & \verb|</s>| \\
+  \verb|unk_token| & \verb|<unk>| \\
+  \bottomrule
+\end{tabular}
+\end{margintable}
+
+                      
+                      
+                       
+                      
+  
+There are $32\,000$ tokens in this particular tokenizer (from $0$ to $31\,999$). 
 
 \subsubsection{Tokenizer configuration}
 
