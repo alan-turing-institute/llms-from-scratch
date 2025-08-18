@@ -35,8 +35,8 @@
 \newcommand{\isdef}{\mathrel{\stackrel{\text{def}}{=}}}
 \hyphenation{anti-sym-met-ric}
 %%
-% \usepackage[backend=biber]{biblatex} 
-%\addbibresource{BIBLIOGRAPHY-GOES-HERE.bib}
+\usepackage[backend=biber]{biblatex} 
+\addbibresource{llms.bib}
 % \DefineBibliographyStrings{english}{
 %   andothers = {\mkbibemph{et\addabbrvspace{al}\adddot}}
 % }
@@ -48,7 +48,8 @@
 
 This note is intended to be a reference guide to running a
 Llama-based, pre-trained model from scratch. Currently, it is based
-around BritLLM.\sidenote{\url{https://huggingface.co/britllm/britllm-3b-v0.1}}
+around
+BritLLM.\sidenote{\url{https://huggingface.co/britllm/britllm-3b-v0.1}}
 
 \section{Deep learning}
 A \emph{deep learning model} is a kind of map,
@@ -91,42 +92,80 @@ inference for this particular model starting with the raw data
 files. The input to the model is a string; the output from the model
 is a probability distribution over the vocabulary of the model.
 
-The first step is to convert the input string to a ``vector.'' And the
-first step in that process is to convert the input string to an array
-of numbers.
-
 \subsection{Tokenisation}
 
-The vocabulary of the model is neither individual letters nor whole
-words but instead parts of words, known as ``tokens.''
+The vocabulary of the model---its input and output---is neither
+individual letters nor whole words but instead parts of words, known
+as ``tokens.'' The input to the model is a sequence of tokens and the
+output is a probability distribution over the vocabulary, the set of
+all tokens.
 
-Each token has an identifying number. ``Tokenisation'' is the process
-of converting a passage of text into its parts of words, and thence to
-a list of integers. Different approaches to tokenisation are in use,
-the one that Llama-type models (like BritLLM) often use is called
-``byte-pair encoding'' [BPE]. A pretrained model comes with a
-pretrained tokeniser\sidenote{The definition of the tokeniser is in
-  the file \texttt{tokenizer.json}, and specifically in the dictionary
-  element labelled \texttt{"model"}. There is some additional
-  configuration in the file \texttt{tokenizer\_config.json}.} defined
-by
-\begin{enumerate}
-\item A set, $T$, of sequences of bytes; and
-  \item A map, $T\to [0 .. N-1]$.
-\end{enumerate}
-Note that the input string is regarded as a sequence of bytes. The
-input string is supposed to be UTF-8 encoded Unicode but it is the
-bytes that are tokenised (and not, for example, the Unicode
-codepoints).
+Each token is a sequence of characters together with a unique
+identifying number which, by abuse of language, we may also refer to
+as the token. ``Tokenisation'' is the process of converting a passage
+of text into its parts of words, and thence to a list of identifying
+numbers. Different approaches to tokenisation are in use: the one that
+Llama-type models (like BritLLM) is called ``byte-pair encoding''
+[BPE]. In fact, there are variations on a theme even within this
+single approach and the name itself is historical and now something of
+a misnomer.
+\begin{marginfigure}
+  \footnotesize
+  \caption{The precise tokenisation process for BritLLM, insofar as I
+    understand it.\label{fig:toksteps}}
+  \begin{enumerate}
+  \item From the pretrained model, one is given a \emph{vocabulary} (a
+    set of tokens) and a \emph{merge list} (an ordered sequence of
+    merge rules). A merge rule is a pair of tokens to match, and a
+    token with which to replace the matching pair.
+  \item First, the input text is converted to (or understood as) a
+    sequence of Unicode codepoints.
+  \item Then, all spaces in the input sequence are replaced by the
+    Unicode character U+2581 (This character, ``lower one eighth
+    block,'' looks like a thick underscore.)\label{tokstep:replace}
+  \item Unless the sequence is empty, the Unicode character U+2581 is
+    also prepended to the beginning of the sequence.
+  \item Each character in the input sequence is converted to a token,
+    by reference to the vocabulary. If there is no token for a
+    particular Unicode character, that character is converted to its
+    UTF-8 representation as bytes, each byte in that representation is
+    converted to a token, and the resulting tokens inserted into the
+    sequence in place of the character. (In the Llama tokeniser, it
+    appears that each byte is guaranteed to have a token of the form
+    ``\texttt{<0xAA>}''.)
+  \item Then the merge rules are processed in order, from first to
+    last.
+  \item For each merge rule, all adjacent pairs of tokens in the
+    sequence matching the merge rule are replaced by the replacement
+    token in the merge rule.\label{tokstep:merge}
+  \item Step \ref{tokstep:merge} is repeated for each merge rule until
+    there are no more merge rules.
+  \end{enumerate}
+\end{marginfigure}
 
-The process of converting a sequence of bytes to a list of integers
-for this particular model and its associated tokeniser is as follows:
-\begin{enumerate}
-\item Replace each space with the character U+2581, ``lower one eighth
-  block.'' (That is to say, with the sequence of bytes \verb|0xe2|,
-  \verb|0x96|, \verb|0x81|.)
-\end{enumerate}
+In byte-pair encoding the process of tokenisation happens roughly as
+follows. The input text is written as a sequence of characters and
+those characters are converted to ``atomic'' tokens. Then, following
+some rule, pairs of adjacent tokens are repeatedly chosen and replaced
+by (or ``merged'') into a single token. This process continues until
+no pair of adjacent tokens can be merged according to the rule. The
+resulting sequence consists of tokens that represent words or parts of
+words.
 
+The above process is only a rough description: one must also make
+specific choices. One such choice is the meaning of ``character.'' In
+the original BPE methodology, a character meant a byte; in the variant
+used by BritLLM it means a Unicode code point. Since not every Unicode
+code point is a token, there is an additional question of what do to
+with Unicode characters that are not represented by tokens. And so on.
+
+The precise details, insofar as I have been able to work them out, are
+given in figure~\ref{fig:toksteps}. See \textcite{zouhar2023formal}
+for a decent overview of~BPE\@.
+
+
+
+\printbibliography
 
 
 \appendix
