@@ -3,28 +3,37 @@
 (require json
          racket/port
          racket/dict
-         racket/string)
+         racket/string
+         racket/match)
 
 #|
+----------------------------------------------------------------------
 
 Basic Llama-type (BPE) tokenizer. The general approach is described
 in, for example:
 
-  Vilém Zouhar et al. “A formal perspective on byte-pair
-  encoding”. In: arXiv preprint arXiv:2306.16837 (2023)
+Vilém Zouhar et al. “A formal perspective on byte-pair
+encoding”. In: arXiv preprint arXiv:2306.16837 (2023)
 
-The tokeniser in this file tries to emulate the "Llama" tokeniser from
-the transfomers library. In particular, this tokeniser:
+Only encoding and decoding are implemented: the merge rules are given,
+not derived from text.
+
+This tokeniser tries to emulate the "Llama" tokeniser from
+the transfomers library. In particular, it:
 
 - takes Unicode scalars as primitive (as opposed to bytes).
 - decodes U+2581 to a space
 
-A tokeniser is a vocabulary and a merge list. A vocabulary is a
-dictionary, string? -> integer?, and the inverse dictionary, integer?
--> string? implemented as a vector (and used for decoding). A merge
-list is a list of merge rules.
+TODO: However, this tokeniser currently fails if an input character is
+not in the list of known tokens
 
+----------------------------------------------------------------------
 |#
+
+;; A tokeniser is a vocabulary and a merge list. A vocabulary is a
+;; dictionary, string? -> integer?, and the inverse dictionary, integer?
+;; -> string? implemented as a vector (and used for decoding). A merge
+;; list is a list of merge rules.
 
 (struct merge-rule (fst snd out) #:transparent)
 (struct tokeniser (vocab vocab-inverse merges) #:transparent)
@@ -74,10 +83,10 @@ list is a list of merge rules.
 ;;
 ;; Decode the list of tokens into a string.
 ;; The algorithm is straightfoward:
-;; 1. All tokens are converted from their numerical to string form;
+;; 1. All tokens are converted from token-ids to string;
 ;; 2. The resulting strings are concatenated.
 ;; 3. If there is a leading U+2581, it is removed.
-;; 4. All other instances of U+2581 are replaced with a space
+;; 4. All other instances of U+2581 are replaced by a space
 
 (define (tokeniser-decode tkner tokens)
   (define (token->string token)
@@ -90,17 +99,58 @@ list is a list of merge rules.
       [(char=? (string-ref out 0) #\▁)
        (string-replace (substring out 1) "▁" " ")]
       [else 
-       (string-replace               out "▁" " ")])))
+       (string-replace  out              "▁" " ")])))
 
+;; tokeniser-encode : tokeniser? string? -> [list-of integer?]
+;;
+;; Encode a string as a list of token ids.
+;; 
+(define (tokeniser-encode tkner str)
+  (let* ([cs (string->list str)]                      ; cs is a list-of char?
+         [cs (map space-to-special cs)]               ; replace spaces by special
+         [cs (if (null? cs) null (cons #\▁ cs))]      ; maybe prefix with special
+         [toks
+          (let ([vocab (tokeniser-vocab tkner)])
+            (for/list ([c (in-list cs)])
+              (hash-ref vocab (string c))))])
+    (merge-tokens (tokeniser-merges tkner) toks)))
+
+(define (space-to-special c)
+  (if (char=? c #\space)
+      #\▁
+      c))
+
+;; merge-tokens : [list-of merge-rule?] [list-of integer?] 
+(define (merge-tokens rules toks)
+  (for/fold ([toks toks])
+            ([rule (in-list rules)])
+    (merge-tokens/rule rule toks)))
+
+;; TODO: Avoid reverse each time
+(define (merge-tokens/rule rule toks)
+  (match rule
+    [(merge-rule fst snd out)
+     (let merge-tokens/rule/recurse ([left '()]
+                                     [right toks])
+       (if (null? right)
+           (reverse left)
+           (let ([a (car right)]
+                 [bs (cdr right)])
+             (if (null? bs)
+                 (reverse (cons a left))
+                 (let ([b (car bs)])
+                   (if (and (= a fst)
+                            (= b snd))
+                       (merge-tokens/rule/recurse (cons out left) (cdr bs))
+                       (merge-tokens/rule/recurse (cons a left) bs)))))))]))
+
+
+;;; ------------------------------------------------------------------ 
 
 (module+ test
   (require rackunit)
 
-  ;; "picked pickled pickles". Example from Zouhar et al., but the
-  ;; merge rules and tokens are excerpted from BritLLM's tokeniser
-  ;; (which looks like a standard Llama one, not a special one for
-  ;; BritLLM). In that tokeniser, for example, "▁p i" is not a merge
-  ;; rule; but "i c" and "▁p ic" are.
+  ;; "picked pickled pickles". Example from Zouhar et al., 
   (define *input-tokeniser* #<<EOF
 {
 "model": {
@@ -115,36 +165,33 @@ list is a list of merge rules.
 "d"       : 7,
 "s"       : 8,
 "▁p"      : 9,
-"ic"      : 10,
-"ick"     : 11,
-"ed"      : 12,
-"▁pick"   : 13,
-"▁picked" : 14,
-"le"      : 15, 
-"led"     : 16,
-"les"     : 17
+"▁pi"    : 10,
+"ck"     : 11,
+"▁pick"  : 12,
+"ed"     : 13,
+"▁pickl" : 14
 },
 "merges" : [
 "▁ p",
-"i c",
-"ic k",
-"▁p ick",
+"▁p i",
+"c k",
+"▁pi ck",
 "e d",
-"▁pick ed",
-"l e",
-"le d",
-"le s"
+"▁pick l"
 ]
 }
 }
 EOF
     )
 
+  ;; --------------------------------------------------
+  ;; Simple example
+  
   (define tkzr
     (call-with-input-string *input-tokeniser* read-tokeniser/json))
 
   (check-equal?
-   (tokeniser-decode tkzr '(14 13 16 13 17))
+   (tokeniser-decode tkzr '(12 13 14 13 14 6 8))
    "picked pickled pickles")
   
   (check-equal?
@@ -159,5 +206,10 @@ EOF
    (tokeniser-decode tkzr '(0 0))
    " ")
 
+  ;; --------------------------------------------------
+  ;; Example using BritLLM's tokeniser definition
+
+  
+  
   
   )
